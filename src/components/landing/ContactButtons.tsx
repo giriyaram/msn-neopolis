@@ -9,7 +9,7 @@ import { PhoneIcon, WhatsAppIcon } from "@/components/ui/Icons";
 /** WhatsApp brand green — kept for instant recognition. */
 const WHATSAPP_GREEN = "bg-[#25D366] text-[#0b2e18] hover:bg-[#1fbe5b]";
 
-type Location = "floating" | "mobile_bar" | "enquiry" | "popup" | "footer";
+type Location = "floating" | "mobile_bar" | "enquiry" | "popup" | "footer" | "payment_plan";
 
 function onCall(location: Location) {
   track("click_call", { location });
@@ -110,6 +110,23 @@ export function BarContactButtons() {
         <WhatsAppIcon width={20} height={20} />
       </a>
     </>
+  );
+}
+
+/** Full-size outlined "Enquire now" WhatsApp button — payment plan CTA. */
+export function WhatsAppEnquireButton({ className }: { className?: string }) {
+  return (
+    <a
+      data-no-popup
+      href={contact.whatsappHref}
+      target="_blank"
+      rel="noopener"
+      onClick={() => onWhatsApp("payment_plan")}
+      className={buttonClasses({ variant: "secondary", className })}
+    >
+      <WhatsAppIcon width={20} height={20} />
+      <span>Enquire now</span>
+    </a>
   );
 }
 

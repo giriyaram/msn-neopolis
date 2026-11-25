@@ -98,8 +98,17 @@ export const specifications = [
 
 export const paymentPlan = {
   label: "20:20:20:20:20",
-  instalments: [20, 20, 20, 20, 20],
+  intro: "The cost of your residence is spread evenly from booking to handover — the same 20% at every stage, so you always know what comes next.",
+  stages: [
+    { title: "First instalment", when: "At the time of booking", percent: 20 },
+    { title: "Second instalment", when: "As per project milestone", percent: 20 },
+    { title: "Third instalment", when: "As per project milestone", percent: 20 },
+    { title: "Fourth instalment", when: "As per project milestone", percent: 20 },
+    { title: "Final instalment", when: "On possession / handover", percent: 20 },
+  ],
   note: "Five instalments of 20% each, payable across the milestones in the official payment schedule.",
+  charges:
+    "Final apartment pricing varies by configuration, tower, floor and selected unit. Taxes, registration, parking and other charges are additional.",
 } as const;
 
 export const pricingDisclaimer =

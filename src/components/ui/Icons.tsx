@@ -43,6 +43,26 @@ export function WhatsAppIcon(props: IconProps) {
   );
 }
 
+/** Stacked layers — used beside the payment-plan summary. */
+export function LayersIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" {...base} {...props}>
+      <path d="M12 3 2.5 8 12 13l9.5-5L12 3Z" />
+      <path d="m2.5 12 9.5 5 9.5-5M2.5 16l9.5 5 9.5-5" />
+    </svg>
+  );
+}
+
+export function InfoIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" {...base} {...props}>
+      <circle cx="10" cy="10" r="8.5" />
+      <path d="M10 9v5" />
+      <circle cx="10" cy="6.25" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function PhoneIcon(props: IconProps) {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" {...base} {...props}>
