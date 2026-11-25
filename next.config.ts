@@ -12,6 +12,17 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  images: {
+    // Placeholder architectural photography for the design-system preview.
+    // Remove once approved MSN renders live in /public or a project CDN.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/photo-**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

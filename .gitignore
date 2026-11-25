@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.gstack/
+!.env.example
+
+# Clear (un-blurred) floor plans — kept out of the repo and out of /public.
+# The site only ships the blurred preview in public/media/.
+/assets/floor-plans/
