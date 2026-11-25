@@ -34,6 +34,28 @@ export type LeadRecord = {
   page_url: string;
   user_agent: string;
   consent_text: string;
+} & FlatLeadFields;
+
+/**
+ * Top-level copies of the key fields, so CRMs that map flat keys (e.g. a
+ * HighLevel inbound webhook → Create Contact) need no nested paths.
+ * Campaign fields come from the last touch, falling back to the first.
+ */
+export type FlatLeadFields = {
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  source: string;
+  configuration: string;
+  size_sft: string;
+  tower: string;
+  gclid: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_term: string;
+  utm_content: string;
 };
 
 export class LeadDeliveryError extends Error {

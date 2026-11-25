@@ -116,8 +116,27 @@ export async function POST(request: Request) {
   const context = cleanContext(input);
   const attribution = (body.attribution ?? {}) as Record<string, unknown>;
   const leadId = crypto.randomUUID();
+  const first = cleanTouch(attribution.first);
+  const last = cleanTouch(attribution.last);
+  const phoneE164 = `+${dial}${normalisePhone(input.phone)}`;
+  const [firstName, ...rest] = input.name.split(/\s+/);
+  const touch = (key: string) => last?.[key] || first?.[key] || "";
 
   const lead: LeadRecord = {
+    full_name: input.name,
+    first_name: firstName ?? "",
+    last_name: rest.join(" "),
+    phone: phoneE164,
+    source: `${project.name} website`,
+    configuration: context.configuration ?? "",
+    size_sft: context.size != null ? String(context.size) : "",
+    tower: context.tower ?? "",
+    gclid: touch("gclid"),
+    utm_source: touch("utm_source"),
+    utm_medium: touch("utm_medium"),
+    utm_campaign: touch("utm_campaign"),
+    utm_term: touch("utm_term"),
+    utm_content: touch("utm_content"),
     lead_id: leadId,
     submission_id: submissionId,
     submitted_at: new Date(now).toISOString(),
@@ -130,10 +149,10 @@ export async function POST(request: Request) {
     },
     contact: {
       name: input.name,
-      phone_e164: `+${dial}${normalisePhone(input.phone)}`,
+      phone_e164: phoneE164,
       phone_country: input.country,
     },
-    attribution: { first: cleanTouch(attribution.first), last: cleanTouch(attribution.last) },
+    attribution: { first, last },
     page_url: str(body.pageUrl, 1000),
     user_agent: str(request.headers.get("user-agent"), 400),
     consent_text: contactCopy.consent,
