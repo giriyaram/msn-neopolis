@@ -195,7 +195,7 @@ export const media: {
   },
 
   floorPlanPreview: {
-    src: "/media/floor-plan-preview.webp",
+    src: "/media/floor-plan-preview-locked.webp",
     width: 1200,
     height: 900,
     alt: "Blurred preview of a residence floor plan",

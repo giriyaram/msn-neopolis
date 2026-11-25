@@ -33,7 +33,7 @@ There are two kinds of image, and they are never mixed up:
 | `interiors[]` | `living-room.webp`, `bedroom.webp` | Residences |
 | `skyPavilions[]` | `sky-pavilions-west.webp`, `sky-pavilions-east.webp` (detail crops of the aerial render) | Sky pavilions |
 | `amenities[]` | `pool-deck`, `clubhouse-lounge`, `cafe-terrace`, `garden-terrace` | Clubhouse & amenities gallery |
-| `floorPlanPreview` | `floor-plan-preview.webp`: a blurred version of the supplied plan, baked into the file. The clear original is in `assets/floor-plans/`, outside `public/`, so it is never served | Floor-plan viewer: the same locked preview for every 3 & 4 BHK size, with an "Unlock this floor plan" enquiry |
+| `floorPlanPreview` | `floor-plan-preview-locked.webp`: a heavily blurred version of the supplied plan, baked into the file. The clear original is in `assets/floor-plans/`, outside `public/`, so it is never served | Floor-plan viewer: the same locked preview for every 3 & 4 BHK size, with an "Unlock this floor plan" enquiry |
 | `location.band` | `stock/hyderabad-durgam-cheruvu-night.webp`: Rishabh Modi / Unsplash | Location opening band |
 | `location.district` | `stock/hitec-city-knowledge-park.webp`: Himanshu Bag / Unsplash | Location, "western corridor" row |
 | `materials.bath` | `stock/bathroom-stone-timber.webp`: Ela De Pure / Unsplash | Specifications |
