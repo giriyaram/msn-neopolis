@@ -74,7 +74,9 @@ Copy `.env.example` to `.env.local` for development, or set the values in your h
 | `CRM_WEBHOOK_SECRET` | Recommended | Sent as `Authorization: Bearer …` |
 | `NEXT_PUBLIC_GTM_ID` | One of these two | GTM container `GTM-XXXXXXX` (preferred) |
 | `NEXT_PUBLIC_GA4_ID` | | GA4 `G-XXXXXXXXXX`, used only when no GTM ID is set |
+| `LEAD_SESSION_SECRET` | **Yes (production)** | 32+ random characters (`openssl rand -base64 36`). Encrypts the post-enquiry session behind `/thank-you`. Without it, enquiries still deliver but show the inline confirmation instead of redirecting |
 | `NEXT_PUBLIC_SALES_PHONE` | Optional | Overrides the Call / WhatsApp number (default `+919032458800`) |
+| `NEXT_PUBLIC_WHATSAPP_PHONE` | Optional | WhatsApp number when it differs from the call number. Defaults to the sales number |
 | `LEAD_DELIVERY_MODE=log` | Dev only | Prints leads to the console instead of delivering them. Ignored in production |
 
 `NEXT_PUBLIC_*` values are built into the bundle, so rebuild after changing them.
@@ -92,6 +94,18 @@ Copy `.env.example` to `.env.local` for development, or set the values in your h
    - server-side validation
    - idempotency on `submissionId`: repeat or double submits return the original `leadId` and are not delivered twice
 3. The lead is sent to `CRM_WEBHOOK_URL`. The API returns `{ ok: true, leadId }` **only after the CRM responds 2xx**. Otherwise it returns 502 or 503, and the form keeps the visitor's details for a retry.
+4. On success the API also sets the post-enquiry session cookie and returns `next: "/thank-you"`. The form fires `generate_lead`, then navigates there client-side. A failed submission never sets the cookie and never redirects.
+
+**Thank-you page** (`/thank-you`, `src/components/thank-you/`)
+
+- **Lead context:** `msn_lead` is an AES-256-GCM encrypted, `httpOnly`, `Secure`, `SameSite=Lax` cookie (`src/lib/server/lead-session.ts`). It expires after 12 hours and holds the lead ID, name, phone and chosen configuration, size and tower. Nothing about the lead is put in the URL or in browser storage, and the browser can't read or change the cookie.
+- **Access:** the page is open to anyone. With a valid cookie it is personalised (name, preferences, reference). Without one (direct visit, expired, tampered or forged cookie) it renders a generic version: no reference, no `thank_you_view`, and "Request payment details" / "Check offer eligibility" open WhatsApp instead of posting to the CRM. The site-visit form works either way.
+- **Refreshing** re-reads the session. Nothing is submitted again and `generate_lead` does not fire again.
+- **Shows** the visitor's first name, a reference, and only the preferences they actually chose. The WhatsApp message is pre-filled with those preferences.
+- **Site visit:** a request form (preferred date within 90 days, morning, afternoon or evening, name, mobile, optional email), prefilled from the session. It is a request: the copy says the MSN team confirms availability, and no appointment slots are shown.
+- **One-tap requests:** "Request payment details" and "Check offer eligibility" send a request using the contact details in the session. If the session has expired, they offer WhatsApp instead.
+- **Delivery:** all three go through `POST /api/follow-up` to the same CRM webhook, linked to the enquiry by `lead_id`. They use the same controls as enquiries (rate limit, honeypot, validation, idempotency). Each request type is delivered at most once per lead or request.
+- **Not indexed:** the page is `noindex` and disallowed in `robots.txt`.
 
 **Lead popup** (`LeadPopup.tsx`, state in `src/lib/lead-popup.ts`)
 
@@ -113,8 +127,13 @@ The rate limit and idempotency maps are held in memory on each server instance. 
 
 **Payload sent to the CRM**
 
+Every record has an `event_type`: `enquiry` (a new lead), or a follow-up from the thank-you page: `site_visit_request`, `payment_details_request` or `offer_eligibility_request`. Branch on it in the CRM workflow. Only `enquiry` creates a lead; follow-ups carry the original `lead_id`, and site visits add `site_visit: { preferred_date, preferred_time }` and `email`.
+
+Every record also carries flat copies of the key fields for direct mapping (e.g. HighLevel → Create Contact). These are `full_name`, `first_name`, `last_name`, `phone`, `source`, `configuration`, `size_sft`, `tower`, `gclid` and `utm_*`. The campaign fields come from the last touch, falling back to the first.
+
 ```json
 {
+  "event_type": "enquiry",
   "lead_id": "uuid",
   "submission_id": "uuid",
   "submitted_at": "ISO-8601",
@@ -149,9 +168,15 @@ Events go to `window.dataLayer` (GTM) or `gtag` (GA4-only).
 | `select_configuration` | Visitor changes configuration, size or tower | `location`: `residences` or `floor_plans` |
 | `view_floor_plan` | An official plan is displayed, enlarged or downloaded | Only once plan assets exist |
 | `generate_lead` | **After the API confirms delivery** | Once per `lead_id`. Never on button clicks. No personal data in the event |
+| `thank_you_view` | `/thank-you` is shown | Once per lead per browser session, so refreshes don't count. **Not a lead** |
+| `whatsapp_contact_click` | A WhatsApp button on `/thank-you` | `location`: `primary_action`, `final_section` or `sticky_bar`. Secondary conversion |
+| `site_visit_request` | **After the API confirms** a site-visit request | Secondary conversion |
+| `payment_details_request` | **After the API confirms** a payment-details request | Once per lead |
+| `consultation_request` | **After the API confirms** an offer-eligibility request | Once per lead |
+| `floor_plan_view`, `pricing_view`, `specifications_view` | Detail links on `/thank-you` are clicked | Engagement only |
 | `qualified_lead`, `schedule_site_visit`, `booking` | In the CRM | Import into Google Ads as **offline conversions**, keyed on the stored GCLID / GBRAID / WBRAID |
 
-Mark only `generate_lead` (and the offline stages) as conversions in Google Ads.
+Mark only `generate_lead` (and the offline stages) as the primary lead conversion in Google Ads. `whatsapp_contact_click` and `site_visit_request` can be secondary conversions. Never use `thank_you_view` or a `/thank-you` page-view rule as a lead conversion: `generate_lead` already fires once, on the form, after confirmed delivery.
 
 **Attribution:** GCLID, GBRAID, WBRAID, UTMs, landing page and external referrer are captured on arrival. They are kept in `localStorage` as first touch (90 days) and last touch, and sent with every lead. Query parameters are never displayed on the page.
 

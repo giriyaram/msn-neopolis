@@ -1,11 +1,23 @@
+import { cookies } from "next/headers";
 import { contactCopy, project } from "@/content/project";
-import { ATTRIBUTION_KEYS } from "@/lib/attribution";
 import { cleanContext, countries, normalisePhone, validateLead, type LeadInput } from "@/lib/lead";
-import { deliverLead, LeadDeliveryError, type LeadRecord } from "@/lib/server/crm";
+import { deliverLead, flatFields, LeadDeliveryError, type LeadRecord } from "@/lib/server/crm";
+import { cleanTouch, clientIp, createRateLimiter, json, str } from "@/lib/server/http";
+import {
+  LEAD_SESSION_COOKIE,
+  SESSION_TTL_S,
+  sealSession,
+  sessionCookieOptions,
+  type LeadSession,
+} from "@/lib/server/lead-session";
 
 /*
  * POST /api/enquiry — validates, filters spam, deduplicates and delivers a
  * lead to the CRM. Responds { ok: true, leadId } only after delivery succeeds.
+ *
+ * On success it also sets the encrypted post-enquiry session cookie and adds
+ * `next: "/thank-you"`; the form navigates there only when `next` is present
+ * (if sessions are unavailable it keeps its inline confirmation instead).
  *
  * Spam & abuse controls (best effort, per server instance):
  *  - honeypot field, minimum completion time
@@ -17,47 +29,24 @@ import { deliverLead, LeadDeliveryError, type LeadRecord } from "@/lib/server/cr
 
 const MAX_BODY = 16_000;
 const MIN_FILL_MS = 3_000;
-const RATE_WINDOW_MS = 10 * 60_000;
-const RATE_MAX = 6;
 const IDEMPOTENCY_TTL_MS = 30 * 60_000;
 
-const rate = new Map<string, number[]>();
-const completed = new Map<string, { leadId: string; at: number }>();
-const inflight = new Map<string, Promise<string>>();
+const rateLimited = createRateLimiter(10 * 60_000, 6);
+const completed = new Map<string, { leadId: string; session: LeadSession; at: number }>();
+const inflight = new Map<string, Promise<{ leadId: string; session: LeadSession }>>();
 
-function json(body: unknown, status = 200) {
-  return Response.json(body, { status, headers: { "cache-control": "no-store" } });
-}
-
-function str(value: unknown, max = 300) {
-  return typeof value === "string" ? value.slice(0, max) : "";
-}
-
-function cleanTouch(value: unknown) {
-  if (!value || typeof value !== "object") return null;
-  const src = value as Record<string, unknown>;
-  const out: Record<string, string> = {};
-  for (const key of [...ATTRIBUTION_KEYS, "landing_page", "referrer", "captured_at"]) {
-    const v = str(src[key], 1000);
-    if (v) out[key] = v;
-  }
-  return out;
-}
-
-function rateLimited(ip: string, now: number) {
-  const hits = (rate.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  hits.push(now);
-  rate.set(ip, hits);
-  if (rate.size > 5000) rate.clear();
-  return hits.length > RATE_MAX;
+/** Set the session cookie and build the success response. */
+async function success(leadId: string, session: LeadSession, duplicate = false) {
+  const sealed = sealSession(session);
+  if (sealed) (await cookies()).set(LEAD_SESSION_COOKIE, sealed, sessionCookieOptions);
+  return json({ ok: true, leadId, ...(duplicate ? { duplicate } : {}), ...(sealed ? { next: "/thank-you" } : {}) });
 }
 
 export async function POST(request: Request) {
   const now = Date.now();
 
   // Rate limit first, so junk and spam requests are throttled too.
-  const ip = (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
-  if (rateLimited(ip, now)) {
+  if (rateLimited(clientIp(request), now)) {
     return json({ ok: false, error: "Too many attempts. Please wait a few minutes and try again." }, 429);
   }
 
@@ -102,11 +91,12 @@ export async function POST(request: Request) {
     if (now - entry.at > IDEMPOTENCY_TTL_MS) completed.delete(key);
   }
   const done = completed.get(submissionId);
-  if (done) return json({ ok: true, leadId: done.leadId, duplicate: true });
+  if (done) return success(done.leadId, done.session, true);
   const pending = inflight.get(submissionId);
   if (pending) {
     try {
-      return json({ ok: true, leadId: await pending, duplicate: true });
+      const result = await pending;
+      return success(result.leadId, result.session, true);
     } catch {
       return json({ ok: false, error: "We couldn't submit your enquiry. Please try again." }, 502);
     }
@@ -118,25 +108,21 @@ export async function POST(request: Request) {
   const leadId = crypto.randomUUID();
   const first = cleanTouch(attribution.first);
   const last = cleanTouch(attribution.last);
-  const phoneE164 = `+${dial}${normalisePhone(input.phone)}`;
-  const [firstName, ...rest] = input.name.split(/\s+/);
-  const touch = (key: string) => last?.[key] || first?.[key] || "";
+  const phoneNational = normalisePhone(input.phone);
+  const phoneE164 = `+${dial}${phoneNational}`;
 
   const lead: LeadRecord = {
-    full_name: input.name,
-    first_name: firstName ?? "",
-    last_name: rest.join(" "),
-    phone: phoneE164,
-    source: `${project.name} website`,
-    configuration: context.configuration ?? "",
-    size_sft: context.size != null ? String(context.size) : "",
-    tower: context.tower ?? "",
-    gclid: touch("gclid"),
-    utm_source: touch("utm_source"),
-    utm_medium: touch("utm_medium"),
-    utm_campaign: touch("utm_campaign"),
-    utm_term: touch("utm_term"),
-    utm_content: touch("utm_content"),
+    event_type: "enquiry",
+    ...flatFields({
+      name: input.name,
+      phoneE164,
+      source: `${project.name} website`,
+      configuration: context.configuration,
+      size: context.size,
+      tower: context.tower,
+      first,
+      last,
+    }),
     lead_id: leadId,
     submission_id: submissionId,
     submitted_at: new Date(now).toISOString(),
@@ -158,13 +144,28 @@ export async function POST(request: Request) {
     consent_text: contactCopy.consent,
   };
 
-  const delivery = deliverLead(lead).then(() => leadId);
+  const session: LeadSession = {
+    v: 1,
+    leadId,
+    name: input.name,
+    phone: phoneE164,
+    phoneCountry: input.country,
+    phoneNational,
+    intent: input.intent,
+    configuration: context.configuration,
+    size: context.size,
+    tower: context.tower,
+    createdAt: now,
+    expiresAt: now + SESSION_TTL_S * 1000,
+  };
+
+  const delivery = deliverLead(lead).then(() => ({ leadId, session }));
   inflight.set(submissionId, delivery);
 
   try {
     await delivery;
-    completed.set(submissionId, { leadId, at: now });
-    return json({ ok: true, leadId });
+    completed.set(submissionId, { leadId, session, at: now });
+    return success(leadId, session);
   } catch (error) {
     const code = error instanceof LeadDeliveryError ? error.code : "upstream_failed";
     console.error(`[lead] delivery failed (${code}):`, (error as Error).message);

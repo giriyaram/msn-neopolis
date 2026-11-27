@@ -22,6 +22,15 @@ export type AnalyticsEvent =
   | "click_call"
   | "click_whatsapp"
   | "generate_lead"
+  // Thank-you page. Secondary engagement — never new leads.
+  | "thank_you_view"
+  | "whatsapp_contact_click"
+  | "site_visit_request"
+  | "payment_details_request"
+  | "consultation_request"
+  | "floor_plan_view"
+  | "pricing_view"
+  | "specifications_view"
   | "qualified_lead"
   | "schedule_site_visit"
   | "booking";

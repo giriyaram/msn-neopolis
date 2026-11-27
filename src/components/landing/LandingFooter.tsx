@@ -33,7 +33,7 @@ export function LandingFooter({ links }: { links: NavLink[] }) {
             <ul className="space-y-3 text-small">
               <FooterContact />
               <li>
-                <Link href="#enquire" className="text-muted hover:text-fg">Enquire</Link>
+                <Link href="/#enquire" className="text-muted hover:text-fg">Enquire</Link>
               </li>
               <li>
                 <Link href="/privacy" className="text-muted hover:text-fg">Privacy policy</Link>

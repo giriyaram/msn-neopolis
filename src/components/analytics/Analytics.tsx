@@ -15,6 +15,7 @@ const GA4_ID = /^G-[A-Z0-9]+$/.test(process.env.NEXT_PUBLIC_GA4_ID ?? "")
   : undefined;
 
 let initialised = false;
+let lastPageView = "";
 
 /**
  * Loads Google Tag Manager (preferred) or GA4, captures attribution and
@@ -22,13 +23,16 @@ let initialised = false;
  */
 export function Analytics() {
   useEffect(() => {
-    if (initialised) return;
-    initialised = true;
-    captureAttribution();
-    seedSelectionFromUrl();
-    // With GTM, page_view is pushed explicitly (see docs). With gtag-only,
-    // the GA4 config command already records the page view.
-    if (GTM_ID) {
+    if (!initialised) {
+      initialised = true;
+      captureAttribution();
+      seedSelectionFromUrl();
+    }
+    // With GTM, page_view is pushed explicitly (see docs) — once per page,
+    // including client-side navigations such as form → /thank-you. With
+    // gtag-only, the GA4 config command already records the page view.
+    if (GTM_ID && lastPageView !== window.location.pathname) {
+      lastPageView = window.location.pathname;
       track("page_view", { page_location: window.location.href, page_title: document.title });
     }
   }, []);

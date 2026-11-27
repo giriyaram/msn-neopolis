@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { contactCopy } from "@/content/project";
 import { trackOnce } from "@/lib/analytics";
@@ -18,7 +19,7 @@ import { useSelection } from "@/lib/selection-store";
 import { Button } from "@/components/ui/Button";
 import { Subheading, Text } from "@/components/ui/Typography";
 
-type Status = "idle" | "sending" | "error" | "success";
+type Status = "idle" | "sending" | "redirecting" | "error" | "success";
 
 const intentCopy: Record<string, { label: string; cta: string }> = {
   "floor-plans": { label: "Official floor plans", cta: "Request floor plans" },
@@ -39,6 +40,7 @@ export function LeadForm({
   variant?: "section" | "dialog";
 }) {
   const stacked = variant === "dialog";
+  const router = useRouter();
   const selection = useSelection();
   const intent = intentCopy[selection.intent] ?? intentCopy.general;
 
@@ -95,7 +97,7 @@ export function LeadForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status === "sending") return; // duplicate-submit guard
+    if (status === "sending" || status === "redirecting") return; // duplicate-submit guard
 
     const e = validateContact(values);
     setErrors(e);
@@ -122,7 +124,7 @@ export function LeadForm({
         }),
       });
       const result = (await response.json().catch(() => null)) as
-        | { ok: true; leadId: string }
+        | { ok: true; leadId: string; next?: string }
         | { ok: false; error: string; fieldErrors?: FieldErrors }
         | null;
 
@@ -136,8 +138,6 @@ export function LeadForm({
         return;
       }
 
-      setLeadId(result.leadId);
-      setStatus("success");
       markLeadSubmitted(); // stops the timed popup and un-gates the buttons
       // Conversion fires only after confirmed delivery, once per lead.
       trackOnce(`lead_${result.leadId}`, "generate_lead", {
@@ -147,6 +147,15 @@ export function LeadForm({
         tower: context.tower || null,
         intent: selection.intent,
       });
+      // The server returns `next` only when it created the post-enquiry
+      // session; otherwise the inline confirmation below is shown instead.
+      if (result.next === "/thank-you") {
+        setStatus("redirecting");
+        router.push("/thank-you");
+        return;
+      }
+      setLeadId(result.leadId);
+      setStatus("success");
     } catch {
       setServerError("We couldn't reach our server. Please check your connection and try again.");
       setStatus("error");
@@ -184,7 +193,7 @@ export function LeadForm({
     );
   }
 
-  const sending = status === "sending";
+  const sending = status === "sending" || status === "redirecting";
 
   return (
     <form onSubmit={submit} noValidate className={stacked ? "" : "border-t border-strong pt-6"}>
@@ -311,7 +320,7 @@ export function LeadForm({
           fullWidth
           className={stacked ? "shrink-0" : "shrink-0 sm:w-auto"}
         >
-          {sending ? "Sending…" : intent.cta}
+          {status === "redirecting" ? "Received — one moment…" : sending ? "Sending…" : intent.cta}
         </Button>
       </div>
     </form>

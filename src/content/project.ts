@@ -30,6 +30,13 @@ export const project = {
  * NEXT_PUBLIC_SALES_PHONE (E.164, e.g. +919032458800) if the number changes.
  */
 const salesPhone = (process.env.NEXT_PUBLIC_SALES_PHONE || "+919032458800").replace(/[^+\d]/g, "");
+/** WhatsApp number — NEXT_PUBLIC_WHATSAPP_PHONE if WhatsApp uses a different line. */
+const whatsappPhone = (process.env.NEXT_PUBLIC_WHATSAPP_PHONE || salesPhone).replace(/[^\d]/g, "");
+
+/** wa.me link to the MSN sales WhatsApp with a pre-filled message. */
+export function whatsappLink(message: string) {
+  return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+}
 
 export const contact = {
   /** E.164, for tel: links and structured data. */
@@ -39,9 +46,9 @@ export const contact = {
     ? `+91 ${salesPhone.slice(3, 8)} ${salesPhone.slice(8)}`
     : salesPhone,
   telHref: `tel:${salesPhone}`,
-  whatsappHref: `https://wa.me/${salesPhone.replace("+", "")}?text=${encodeURIComponent(
+  whatsappHref: whatsappLink(
     "Hi, I'm interested in MSN Neopolis, Kokapet. Please share the floor plans and cost sheet.",
-  )}`,
+  ),
 } as const;
 
 export const configurations: Record<
